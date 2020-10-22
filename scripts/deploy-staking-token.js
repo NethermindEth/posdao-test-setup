@@ -8,6 +8,7 @@ const constants = require('../utils/constants');
 const SnS = require('../utils/signAndSendTx.js');
 const web3 = new Web3('http://localhost:8541');
 web3.eth.transactionConfirmationBlocks = 1;
+web3.eth.transactionPollingTimeout = 30;
 const BN = web3.utils.BN;
 const BlockRewardAuRa = require(path.join(__dirname, '../utils/getContract'))('BlockRewardAuRa', web3);
 const StakingAuRa = require(path.join(__dirname, '../utils/getContract'))('StakingAuRa', web3);
@@ -58,9 +59,10 @@ async function main() {
     let bytecode = compiledContract.evm.bytecode.object;
     const netId = await web3.eth.net.getId();
 
-    let contract = new web3.eth.Contract(abi);
     console.log(`**** Deploying StakingToken. netId = ${netId}`);
-    let StakingTokenInstance = await contract
+    const contract = new web3.eth.Contract(abi);
+    // Deploy using eth_sendTransaction
+    const StakingTokenInstance = await contract
         .deploy({
             data: '0x' + bytecode,
             arguments: [tokenName, tokenSymbol, tokenDecimals, netId],
@@ -68,8 +70,23 @@ async function main() {
         .send({
             from: OWNER,
             gas: '4700000',
-            gasPrice: '0',
+            gasPrice: '0'
         });
+    /*
+    // Deploy using eth_sendRawTransaction
+    const stakingTokenDeploy = await contract.deploy({
+        data: '0x' + bytecode,
+        arguments: [tokenName, tokenSymbol, tokenDecimals, netId]
+    });
+    const stakingTokenDeployTxReceipt = await SnS(web3, {
+        from: OWNER,
+        method: stakingTokenDeploy,
+        gasLimit: '4700000',
+        gasPrice: '0'
+    });
+    const StakingTokenInstance = new web3.eth.Contract(abi, stakingTokenDeployTxReceipt.contractAddress);
+    */
+
     let address = StakingTokenInstance.options.address;
     console.log('**** StakingToken deployed at:', address);
 

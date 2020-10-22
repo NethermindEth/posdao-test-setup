@@ -1,12 +1,12 @@
 [parity]
 chain = "./data/spec.json"
-base_path = "data/node3"
+base_path = "data/node4"
 
 [ui]
 disable = true
 
 [network]
-port = 30303
+port = 30304
 discovery = true
 reserved_peers="data/reserved-peers"
 nat = "none"
@@ -14,10 +14,10 @@ interface = "local"
 
 [rpc]
 apis = ["web3", "eth", "pubsub", "net", "parity", "parity_set", "parity_pubsub", "personal", "traces", "rpc", "shh", "shh_pubsub"]
-port = 8543
+port = 8544
 
 [websockets]
-port = 9543
+port = 9544
 
 [ipc]
 disable = true
@@ -26,14 +26,14 @@ disable = true
 disable = true
 
 [account]
-unlock = ["0x522df396ae70a058bd69778408630fdb023389b2"]
+unlock = ["0xf67cc5231c5858ad6cc87b105217426e17b824bb"]
 password = ["config/password"]
 
 [mining]
 force_sealing = true
 min_gas_price = 1000000000
-gas_floor_target = "10000000"
-engine_signer = "0x522df396ae70a058bd69778408630fdb023389b2"
+gas_floor_target = "12000000"
+engine_signer = "0xf67cc5231c5858ad6cc87b105217426e17b824bb"
 reseal_on_txs = "none"
 extra_data = "Parity"
 
