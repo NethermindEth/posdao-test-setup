@@ -13,6 +13,9 @@ const ValidatorSetAuRa = require('../utils/getContract')('ValidatorSetAuRa', web
 const BN = web3.utils.BN;
 const OWNER = constants.OWNER;
 
+// Set to `false` to ignore transactions order when they are in different blocks
+const checkOrderWhenDifferentBlocks = true;
+
 describe('TxPriority tests', () => {
   const gasPrice0 = web3.utils.toWei('0', 'gwei');
   const gasPrice1 = web3.utils.toWei('1', 'gwei');
@@ -47,8 +50,8 @@ describe('TxPriority tests', () => {
         arguments: [web3.utils.toWei('1'), account.address],
         params: { from: OWNER, gasPrice: gasPrice0, nonce: ownerNonce++ }
       }];
-      const results = await batchSendTransactions(transactions);
-      const allTxSucceeded = results.reduce((acc, val) => acc && val.receipt.status, true);
+      const { receipts } = await batchSendTransactions(transactions);
+      const allTxSucceeded = receipts.reduce((acc, receipt) => acc && receipt.status, true);
       expect(allTxSucceeded, `Cannot mint coins for the owner and an arbitrary account`).to.equal(true);
     }
   });
@@ -72,47 +75,57 @@ describe('TxPriority tests', () => {
       arguments: [StakingAuRa.address, '0x48aaa4a2', '1000'],
       params: { from: OWNER, gasPrice: gasPrice0, nonce: ownerNonce++ }
     }];
-    let results = await batchSendTransactions(transactions);
-    let allTxSucceeded = results.reduce((acc, val) => acc && val.receipt.status, true);
+    let { receipts } = await batchSendTransactions(transactions);
+    let allTxSucceeded = receipts.reduce((acc, receipt) => acc && receipt.status, true);
     expect(allTxSucceeded, `Cannot set priorities`).to.equal(true);
 
-    // Send test transactions
-    transactions = [{
-      // 0. Call StakingAuRa.setCandidateMinStake with non-zero gas price
-      // and nonce + 0
-      method: StakingAuRa.instance.methods.setCandidateMinStake,
-      arguments: [candidateMinStake],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
-    }, {
-      // 1. Call BlockRewardAuRa.setErcToNativeBridgesAllowed with non-zero gas price
-      // and nonce + 2
-      method: BlockRewardAuRa.instance.methods.setErcToNativeBridgesAllowed,
-      arguments: [[OWNER]],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce + 2 }
-    }, {
-      // 2. Call StakingAuRa.setDelegatorMinStake with non-zero gas price
-      // and nonce + 1
-      method: StakingAuRa.instance.methods.setDelegatorMinStake,
-      arguments: [delegatorMinStake],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce + 1 }
-    }, {
-      // 3. The arbitrary account sends a TX with higher gas price
-      method: web3.eth.sendSignedTransaction,
-      params: (await account.signTransaction({
-        to: '0x0000000000000000000000000000000000000000',
-        gas: '21000',
-        gasPrice: gasPrice2
-      })).rawTransaction
-    }];
-    results = await batchSendTransactions(transactions, true);
+    // Wait for a few blocks to let validator nodes apply the TxPriority rules
+    await applyPriorityRules();
+
+    // Send test transactions in a single block
+    receipts = await sendTestTransactionsInSingleBlock(async () => {
+      const ownerNonce = await web3.eth.getTransactionCount(OWNER);
+      const transactions = [{
+        // 0. Call StakingAuRa.setCandidateMinStake with non-zero gas price
+        // and nonce + 0
+        method: StakingAuRa.instance.methods.setCandidateMinStake,
+        arguments: [candidateMinStake],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
+      }, {
+        // 1. Call BlockRewardAuRa.setErcToNativeBridgesAllowed with non-zero gas price
+        // and nonce + 2
+        method: BlockRewardAuRa.instance.methods.setErcToNativeBridgesAllowed,
+        arguments: [[OWNER]],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce + 2 }
+      }, {
+        // 2. Call StakingAuRa.setDelegatorMinStake with non-zero gas price
+        // and nonce + 1
+        method: StakingAuRa.instance.methods.setDelegatorMinStake,
+        arguments: [delegatorMinStake],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce + 1 }
+      }, {
+        // 3. The arbitrary account sends a TX with higher gas price
+        method: web3.eth.sendSignedTransaction,
+        params: (await account.signTransaction({
+          to: '0x0000000000000000000000000000000000000000',
+          gas: '21000',
+          gasPrice: gasPrice2
+        })).rawTransaction
+      }];
+      return await batchSendTransactions(transactions, true);
+    });
 
     // Check transactions order (will fail on OpenEthereum)
-    expect(sortByTransactionIndex(results), 'Invalid transactions order').to.eql([
+    const expectedTxOrder = [
       0, // StakingAuRa.setCandidateMinStake
       2, // StakingAuRa.setDelegatorMinStake
       1, // BlockRewardAuRa.setErcToNativeBridgesAllowed
       3, // arbitrary transaction
-    ]);
+    ];
+    expect(sortByTransactionIndex(receipts.receiptsInSingleBlock), 'Invalid transactions order in a single block').to.eql(expectedTxOrder);
+    if (checkOrderWhenDifferentBlocks && receipts.receiptsInDifferentBlocks) {
+      expect(sortByTransactionIndex(receipts.receiptsInDifferentBlocks), 'Invalid transactions order in different blocks').to.eql(expectedTxOrder);
+    }
 
     // Remove previously set priorities
     ownerNonce = await web3.eth.getTransactionCount(OWNER);
@@ -132,50 +145,59 @@ describe('TxPriority tests', () => {
       arguments: [StakingAuRa.address, '0x48aaa4a2'],
       params: { from: OWNER, gasPrice: gasPrice0, nonce: ownerNonce++ }
     }];
-    results = await batchSendTransactions(transactions);
-    allTxSucceeded = results.reduce((acc, val) => acc && val.receipt.status, true);
+    receipts = (await batchSendTransactions(transactions)).receipts;
+    allTxSucceeded = receipts.reduce((acc, receipt) => acc && receipt.status, true);
     expect(allTxSucceeded, 'Cannot remove priorities').to.equal(true);
+
+    // Wait for a few blocks to let validator nodes apply the TxPriority rules
+    await applyPriorityRules();
   });
 
   it('Test 2', async function() {
-    // Send test transactions
-    const ownerNonce = await web3.eth.getTransactionCount(OWNER);
-    const transactions = [{
-      // 0. Call StakingAuRa.setCandidateMinStake with non-zero gas price
-      // and nonce + 0
-      method: StakingAuRa.instance.methods.setCandidateMinStake,
-      arguments: [candidateMinStake],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
-    }, {
-      // 1. Call BlockRewardAuRa.setErcToNativeBridgesAllowed with non-zero gas price
-      // and nonce + 2
-      method: BlockRewardAuRa.instance.methods.setErcToNativeBridgesAllowed,
-      arguments: [[OWNER]],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce + 2 }
-    }, {
-      // 2. Call StakingAuRa.setDelegatorMinStake with non-zero gas price
-      // and nonce + 1
-      method: StakingAuRa.instance.methods.setDelegatorMinStake,
-      arguments: [delegatorMinStake],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce + 1 }
-    }, {
-      // 3. The arbitrary account sends a TX with higher gas price
-      method: web3.eth.sendSignedTransaction,
-      params: (await account.signTransaction({
-        to: '0x0000000000000000000000000000000000000000',
-        gas: '21000',
-        gasPrice: gasPrice2
-      })).rawTransaction
-    }];
-    const results = await batchSendTransactions(transactions, true);
+    // Send test transactions in a single block
+    const receipts = await sendTestTransactionsInSingleBlock(async () => {
+      const ownerNonce = await web3.eth.getTransactionCount(OWNER);
+      const transactions = [{
+        // 0. Call StakingAuRa.setCandidateMinStake with non-zero gas price
+        // and nonce + 0
+        method: StakingAuRa.instance.methods.setCandidateMinStake,
+        arguments: [candidateMinStake],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
+      }, {
+        // 1. Call BlockRewardAuRa.setErcToNativeBridgesAllowed with non-zero gas price
+        // and nonce + 2
+        method: BlockRewardAuRa.instance.methods.setErcToNativeBridgesAllowed,
+        arguments: [[OWNER]],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce + 2 }
+      }, {
+        // 2. Call StakingAuRa.setDelegatorMinStake with non-zero gas price
+        // and nonce + 1
+        method: StakingAuRa.instance.methods.setDelegatorMinStake,
+        arguments: [delegatorMinStake],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce + 1 }
+      }, {
+        // 3. The arbitrary account sends a TX with higher gas price
+        method: web3.eth.sendSignedTransaction,
+        params: (await account.signTransaction({
+          to: '0x0000000000000000000000000000000000000000',
+          gas: '21000',
+          gasPrice: gasPrice2
+        })).rawTransaction
+      }];
+      return await batchSendTransactions(transactions, true);
+    });
 
     // Check transactions order
-    expect(sortByTransactionIndex(results), 'Invalid transactions order').to.eql([
+    const expectedTxOrder = [
       3, // arbitrary transaction
       0, // StakingAuRa.setCandidateMinStake
       2, // StakingAuRa.setDelegatorMinStake
       1, // BlockRewardAuRa.setErcToNativeBridgesAllowed
-    ]);
+    ];
+    expect(sortByTransactionIndex(receipts.receiptsInSingleBlock), 'Invalid transactions order in a single block').to.eql(expectedTxOrder);
+    if (checkOrderWhenDifferentBlocks && receipts.receiptsInDifferentBlocks) {
+      expect(sortByTransactionIndex(receipts.receiptsInDifferentBlocks), 'Invalid transactions order in different blocks').to.eql(expectedTxOrder);
+    }
   });
 
   it('Test 3', async function() {
@@ -202,94 +224,116 @@ describe('TxPriority tests', () => {
       arguments: [StakingAuRa.address, '0x48aaa4a2', '1000'],
       params: { from: OWNER, gasPrice: gasPrice0, nonce: ownerNonce++ }
     }];
-    let results = await batchSendTransactions(transactions);
-    let allTxSucceeded = results.reduce((acc, val) => acc && val.receipt.status, true);
+    let { receipts } = await batchSendTransactions(transactions);
+    let allTxSucceeded = receipts.reduce((acc, receipt) => acc && receipt.status, true);
     expect(allTxSucceeded, `Cannot set priorities`).to.equal(true);
 
-    // Send test transactions
-    transactions = [{
-      // 0. Call StakingAuRa.setCandidateMinStake with non-zero gas price
-      // and nonce + 0
-      method: StakingAuRa.instance.methods.setCandidateMinStake,
-      arguments: [candidateMinStake],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce++ }
-    }, {
-      // 1. Call StakingAuRa.setDelegatorMinStake with non-zero gas price
-      // and nonce + 1
-      method: StakingAuRa.instance.methods.setDelegatorMinStake,
-      arguments: [delegatorMinStake],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce++ }
-    }, {
-      // 2. Call BlockRewardAuRa.setErcToNativeBridgesAllowed with non-zero gas price
-      // and nonce + 2
-      method: BlockRewardAuRa.instance.methods.setErcToNativeBridgesAllowed,
-      arguments: [[OWNER]],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce++ }
-    }, {
-      // 3. The arbitrary account sends a TX with the same gas price
-      method: web3.eth.sendSignedTransaction,
-      params: (await account.signTransaction({
-        to: account.address,
-        gas: '21000',
-        gasPrice: gasPrice1
-      })).rawTransaction
-    }];
-    results = await batchSendTransactions(transactions, true);
+    // Wait for a few blocks to let validator nodes apply the TxPriority rules
+    await applyPriorityRules();
+
+    // Send test transactions in a single block
+    receipts = await sendTestTransactionsInSingleBlock(async () => {
+      let ownerNonce = await web3.eth.getTransactionCount(OWNER);
+      const transactions = [{
+        // 0. Call StakingAuRa.setCandidateMinStake with non-zero gas price
+        // and nonce + 0
+        method: StakingAuRa.instance.methods.setCandidateMinStake,
+        arguments: [candidateMinStake],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce++ }
+      }, {
+        // 1. Call StakingAuRa.setDelegatorMinStake with non-zero gas price
+        // and nonce + 1
+        method: StakingAuRa.instance.methods.setDelegatorMinStake,
+        arguments: [delegatorMinStake],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce++ }
+      }, {
+        // 2. Call BlockRewardAuRa.setErcToNativeBridgesAllowed with non-zero gas price
+        // and nonce + 2
+        method: BlockRewardAuRa.instance.methods.setErcToNativeBridgesAllowed,
+        arguments: [[OWNER]],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce++ }
+      }, {
+        // 3. The arbitrary account sends a TX with the same gas price
+        method: web3.eth.sendSignedTransaction,
+        params: (await account.signTransaction({
+          to: account.address,
+          gas: '21000',
+          gasPrice: gasPrice1
+        })).rawTransaction
+      }];
+      return await batchSendTransactions(transactions, true);
+    });
 
     // Check transactions order (will fail on OpenEthereum)
-    expect(sortByTransactionIndex(results), 'Invalid transactions order').to.eql([
+    const expectedTxOrder = [
       3, // arbitrary transaction
       0, // StakingAuRa.setCandidateMinStake
       1, // StakingAuRa.setDelegatorMinStake
       2, // BlockRewardAuRa.setErcToNativeBridgesAllowed
-    ]);
+    ];
+    expect(sortByTransactionIndex(receipts.receiptsInSingleBlock), 'Invalid transactions order in a single block').to.eql(expectedTxOrder);
+    if (checkOrderWhenDifferentBlocks && receipts.receiptsInDifferentBlocks) {
+      expect(sortByTransactionIndex(receipts.receiptsInDifferentBlocks), 'Invalid transactions order in different blocks').to.eql(expectedTxOrder);
+    }
   });
 
   it('Test 4 (depends on Test 3)', async function() {
-    // Send test transactions
-    const ownerNonce = await web3.eth.getTransactionCount(OWNER);
-    const transactions = [{
-      // 0. The arbitrary account sends a TX
-      method: web3.eth.sendSignedTransaction,
-      params: (await account.signTransaction({
-        to: account.address,
-        gas: '21000',
-        gasPrice: gasPrice1
-      })).rawTransaction
-    }, {
-      // 1. Call StakingAuRa.setCandidateMinStake with the same gas price
-      method: StakingAuRa.instance.methods.setCandidateMinStake,
-      arguments: [candidateMinStake],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
-    }, {
-      // 2. Call BlockRewardAuRa.setErcToNativeBridgesAllowed with the same gas price
-      // and nonce
-      method: BlockRewardAuRa.instance.methods.setErcToNativeBridgesAllowed,
-      arguments: [[OWNER]],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
-    }, {
-      // 3. Call StakingAuRa.setDelegatorMinStake with the same gas price and nonce
-      method: StakingAuRa.instance.methods.setDelegatorMinStake,
-      arguments: [delegatorMinStake],
-      params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
-    }];
-    const results = await batchSendTransactions(transactions, true);
+    // Send test transactions in a single block
+    const receipts = await sendTestTransactionsInSingleBlock(async () => {
+      const ownerNonce = await web3.eth.getTransactionCount(OWNER);
+      const transactions = [{
+        // 0. The arbitrary account sends a TX
+        method: web3.eth.sendSignedTransaction,
+        params: (await account.signTransaction({
+          to: account.address,
+          gas: '21000',
+          gasPrice: gasPrice1
+        })).rawTransaction
+      }, {
+        // 1. Call StakingAuRa.setCandidateMinStake with the same gas price
+        method: StakingAuRa.instance.methods.setCandidateMinStake,
+        arguments: [candidateMinStake],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
+      }, {
+        // 2. Call BlockRewardAuRa.setErcToNativeBridgesAllowed with the same gas price
+        // and nonce
+        method: BlockRewardAuRa.instance.methods.setErcToNativeBridgesAllowed,
+        arguments: [[OWNER]],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
+      }, {
+        // 3. Call StakingAuRa.setDelegatorMinStake with the same gas price and nonce
+        method: StakingAuRa.instance.methods.setDelegatorMinStake,
+        arguments: [delegatorMinStake],
+        params: { from: OWNER, gasPrice: gasPrice1, nonce: ownerNonce }
+      }];
+      return await batchSendTransactions(transactions, true);
+    });
 
     // Check transactions order (will fail on OpenEthereum)
-    expect(sortByTransactionIndex(results), 'Invalid transactions order').to.eql([
+    const expectedTxOrder = [
       2, // BlockRewardAuRa.setErcToNativeBridgesAllowed
       0, // arbitrary transaction
-    ]);
+    ];
+    expect(sortByTransactionIndex(receipts.receiptsInSingleBlock), 'Invalid transactions order in a single block').to.eql(expectedTxOrder);
+    if (checkOrderWhenDifferentBlocks && receipts.receiptsInDifferentBlocks) {
+      expect(sortByTransactionIndex(receipts.receiptsInDifferentBlocks), 'Invalid transactions order in different blocks').to.eql(expectedTxOrder);
+    }
   });
 
   it('Finish', async function() {
     await waitForNextStakingEpoch(web3);
   });
 
-  async function batchSendTransactions(transactions, ensureSingleBlock) {
-    let promises = [];
+  async function applyPriorityRules() {
+    const startBlockNumber = await web3.eth.getBlockNumber();
+    do {
+      await sleep(500);
+    } while (await web3.eth.getBlockNumber() - startBlockNumber < 2);
+  }
 
+  async function batchSendTransactions(transactions, ensureSingleBlock) {
     // Estimate gas for each transaction
+    const promises = [];
     transactions.forEach(item => {
       const arguments = item.arguments;
       if (arguments !== undefined && !item.params.gas) {
@@ -309,70 +353,24 @@ describe('TxPriority tests', () => {
       }
     });
     const gas = await Promise.all(promises);
-    promises = [];
 
-    // Send transactions
-    let batch = new web3.BatchRequest();
-    transactions.forEach((item, index) => {
-      const arguments = item.arguments;
-      let send;
-      if (arguments !== undefined) {
-        // eth_sendTransaction
-        send = item.method(...arguments).send;
-      } else {
-        // eth_sendRawTransaction
-        send = item.method;
-      }
-      if (gas[index]) {
-        item.params.gas = gas[index] * 2;
-      }
-      promises.push(new Promise((resolve, reject) => {
-        batch.add(send.request(item.params, async (err, txHash) => {
-          if (err) {
-            reject(err);
-          } else {
-            const tx = await web3.eth.getTransaction(txHash);
-            if (tx) {
-              let receipt = null;
-              while (receipt == null) {
-                await new Promise(r => setTimeout(r, 500));
-                receipt = await web3.eth.getTransactionReceipt(txHash);
-              }
-              resolve({ tx, receipt });
-            } else {
-              resolve();
-            }
-          }
-        }));
-      }));
-    });
-    batch.execute();
-    const results = await Promise.all(promises);
+    const receipts = await executeTransactions(transactions, gas);
 
     if (ensureSingleBlock && transactions.length > 0) {
       // Ensure the transactions were mined in the same block
-      let blockNumber = 0;
-      let blockNumbers = results.map(r => r ? r.receipt.blockNumber : 0);
-      blockNumbers = blockNumbers.filter((x, i, a) => a.indexOf(x) == i);
-      blockNumbers.sort((a, b) => a - b);
-      if (blockNumbers.length == 1) {
-        blockNumber = blockNumbers[0];
-        expect(blockNumber > 0, 'Invalid block number').to.equal(true);
-      } else if (blockNumbers.length == 2) {
-        blockNumber = blockNumbers[1];
-        expect(blockNumber > 0 && blockNumbers[0] == 0, 'Invalid block number').to.equal(true);
-      } else {
-        expect(false, 'Transactions were not mined in the same block').to.equal(true);
+      let blockNumber = getTransactionsBlockNumber(receipts);
+      if (!blockNumber) {
+        return { receipts, singleBlock: false };
       }
 
       // Check min/max transactionIndex
       let minTransactionIndex = Number.MAX_SAFE_INTEGER;
       let maxTransactionIndex = Number.MIN_SAFE_INTEGER;
       let definedResults = 0;
-      results.forEach(r => {
-        if (r) {
-          minTransactionIndex = Math.min(minTransactionIndex, r.receipt.transactionIndex);
-          maxTransactionIndex = Math.max(maxTransactionIndex, r.receipt.transactionIndex);
+      receipts.forEach(receipt => {
+        if (receipt) {
+          minTransactionIndex = Math.min(minTransactionIndex, receipt.transactionIndex);
+          maxTransactionIndex = Math.max(maxTransactionIndex, receipt.transactionIndex);
           definedResults++;
         }
       });
@@ -403,19 +401,109 @@ describe('TxPriority tests', () => {
           }
         }
       }
+
+      return { receipts, singleBlock: true };
     }
 
-    return results;
+    return { receipts };
   }
 
-  function sortByTransactionIndex(results) {
-    let sortedResults = results.map((r, i) => {
-      return { i, transactionIndex: r ? r.receipt.transactionIndex : -1 };
+  async function executeTransactions(transactions, gas) {
+    const promises = [];
+
+    // Prepare transactions for sending in batch
+    let batch = new web3.BatchRequest();
+    transactions.forEach((item, index) => {
+      const arguments = item.arguments;
+      let send;
+      if (arguments !== undefined) {
+        // eth_sendTransaction
+        send = item.method(...arguments).send;
+      } else {
+        // eth_sendRawTransaction
+        send = item.method;
+      }
+      if (gas[index]) {
+        item.params.gas = gas[index] * 2;
+      }
+      promises.push(new Promise((resolve, reject) => {
+        batch.add(send.request(item.params, async (err, txHash) => {
+          if (err) {
+            reject(err);
+          } else {
+            let attempts = 0;
+            let receipt = null;
+            // Wait for the receipt during 30 seconds
+            while (receipt == null && attempts++ <= 60) {
+              await sleep(500);
+              receipt = await web3.eth.getTransactionReceipt(txHash);
+            }
+            resolve(receipt);
+          }
+        }));
+      }));
+    });
+
+    // Execute the batch
+    batch.execute();
+    return await Promise.all(promises);
+  }
+
+  function getTransactionsBlockNumber(receipts) {
+    let blockNumber = 0;
+    let blockNumbers = receipts.map(receipt => receipt ? receipt.blockNumber : 0);
+    blockNumbers = blockNumbers.filter((x, i, a) => a.indexOf(x) == i);
+    blockNumbers.sort((a, b) => a - b);
+    if (blockNumbers.length == 1) {
+      blockNumber = blockNumbers[0];
+      expect(blockNumber > 0, 'Invalid block number').to.equal(true);
+    } else if (blockNumbers.length == 2) {
+      blockNumber = blockNumbers[1];
+      if (blockNumber == 0 || blockNumbers[0] != 0) {
+        return 0;
+      }
+    }
+    return blockNumber;
+  }
+
+  async function sendTestTransactionsInSingleBlock(sendTestTransactions) {
+    let results = await sendTestTransactions();
+
+    let receiptsInDifferentBlocks = null;
+    if (!results.singleBlock) {
+      receiptsInDifferentBlocks = JSON.parse(JSON.stringify(results.receipts));
+    }
+
+    for (let t = 0; t < 10 && !results.singleBlock; t++) {
+      console.log('      Transactions were not mined in the same block. Retrying...');
+      results = await sendTestTransactions();
+    }
+    if (!results.singleBlock) {
+      expect(false, 'Transactions were not mined in the same block').to.equal(true);
+    }
+    return { receiptsInDifferentBlocks, receiptsInSingleBlock: results.receipts };
+  }
+
+  function sortByTransactionIndex(receipts) {
+    let sortedResults = receipts.map((receipt, i) => {
+      return {
+        i,
+        transactionIndex: receipt ? receipt.transactionIndex : -1,
+        blockNumber: receipt ? receipt.blockNumber : -1
+      };
     });
     sortedResults = sortedResults.filter(sr => sr.transactionIndex >= 0);
-    sortedResults.sort((a, b) => a.transactionIndex - b.transactionIndex);
+    sortedResults.sort(
+      (a, b) => a.blockNumber != b.blockNumber
+              ? a.blockNumber - b.blockNumber
+              : a.transactionIndex - b.transactionIndex
+    );
     sortedResults = sortedResults.map(r => r.i);
     return sortedResults;
   }
 
 });
+
+async function sleep(ms) {
+  await new Promise(r => setTimeout(r, ms));
+}
