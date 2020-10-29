@@ -850,9 +850,11 @@ describe('TxPriority tests', () => {
   }
 
   function checkTransactionOrder(expectedTxOrder, receipts) {
-    expect(sortByTransactionIndex(receipts.receiptsInSingleBlock), 'Invalid transactions order in a single block').to.eql(expectedTxOrder);
+	let results = sortByTransactionIndex(receipts.receiptsInSingleBlock);
+    expect(results.map(r => r.i), 'Invalid transactions order in a single block').to.eql(expectedTxOrder, JSON.stringify(results.map(r => r.transactionHash)));
     if (checkOrderWhenDifferentBlocks && receipts.receiptsInDifferentBlocks) {
-      expect(sortByTransactionIndex(receipts.receiptsInDifferentBlocks), 'Invalid transactions order in different blocks').to.eql(expectedTxOrder);
+	  let results = sortByTransactionIndex(receipts.receiptsInDifferentBlocks);
+      expect(results.map(r => r.i), 'Invalid transactions order in different blocks').to.eql(expectedTxOrder, JSON.stringify(results.map(r => r.transactionHash)));
     }
   }
 
@@ -929,7 +931,7 @@ describe('TxPriority tests', () => {
     }
 
     for (let t = 0; t < 10 && !results.singleBlock; t++) {
-      console.log('      Transactions were not mined in the same block. Retrying...');
+      console.log('      Transactions were not mined in the same block. Retrying... ' + JSON.stringify(results.receipts));
       results = await batchSendTransactions(await getTransactions(), true, receiptsExpected);
     }
     if (!results.singleBlock) {
@@ -943,7 +945,8 @@ describe('TxPriority tests', () => {
       return {
         i,
         transactionIndex: receipt ? receipt.transactionIndex : -1,
-        blockNumber: receipt ? receipt.blockNumber : -1
+        blockNumber: receipt ? receipt.blockNumber : -1,
+		transactionHash: receipt ? receipt.transactionHash : null 
       };
     });
     sortedResults = sortedResults.filter(sr => sr.transactionIndex >= 0);
@@ -952,8 +955,8 @@ describe('TxPriority tests', () => {
               ? a.blockNumber - b.blockNumber
               : a.transactionIndex - b.transactionIndex
     );
-    sortedResults = sortedResults.map(r => r.i);
-    return sortedResults;
+	return sortedResults;
+       
   }
 
 });
