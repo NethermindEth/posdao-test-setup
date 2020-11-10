@@ -36,7 +36,8 @@
   {
     "ForceSealing": true,
     "AllowAuRaPrivateChains": true,
-    "TxPriorityContractAddress": "0x4100000000000000000000000000000000000000"
+    "TxPriorityContractAddress": "0x4100000000000000000000000000000000000000",
+    "TxPriorityConfigFilePath": "./config/TxPriority.json"
   },
   "KeyStore":
   {
@@ -45,7 +46,7 @@
     "UnlockAccounts": ["0x720e118ab1006cc97ed2ef6b4b49ac04bb3aa6d9"],
     "KeyStoreDirectory": "./data/node6/keys/DPoSChain"
   },
-  "MiningConfig":
+  "Mining":
   {
     "MinGasPrice": "1000000000",
     "TargetBlockGasLimit": "12000000"

@@ -34,7 +34,7 @@ $ cd openethereum
 $ cargo build --release --features final
 ```
 
-To save time, you can download a pre-compiled binary from the [releases page](https://github.com/openethereum/openethereum/releases) (>= v3.0.0 is supported). But you still need to maintain directory structure and naming conventions:
+To save time, you can download a pre-compiled binary from the [releases page](https://github.com/openethereum/openethereum/releases) (v3.0 is supported). But you still need to maintain directory structure and naming conventions:
 ```bash
 # move up from posdao-test-setup root
 $ cd ..
@@ -57,13 +57,13 @@ To integrate with [Nethermind](https://github.com/NethermindEth/nethermind), the
 ```
 So there should be two folders on the same level and `posdao-test-setup` will use a binary from the `nethermind` folder, namely the binary is assumed to be at `../nethermind/bin/Nethermind.Runner` relative to `posdao-test-setup` root.
 
-A pre-compiled binary can be downloaded from the [releases page](https://github.com/NethermindEth/nethermind/releases) (>= v1.9.10 is supported). You need to maintain directory structure and naming conventions:
+A pre-compiled binary can be downloaded from the [releases page](https://github.com/NethermindEth/nethermind/releases) (> v1.9.14 is supported). You need to maintain directory structure and naming conventions:
 ```bash
 # move up from posdao-test-setup root
 $ cd ..
 $ mkdir -p nethermind/bin
 # an example for Linux binary
-$ curl -SfL 'https://nethdev.blob.core.windows.net/builds/nethermind-linux-amd64-1.8.98-f9bc1c1.zip' -o nethermind/bin/nethermind.zip
+$ curl -SfL 'https://nethdev.blob.core.windows.net/builds/nethermind-linux-amd64-1.9.14-25aab82.zip' -o nethermind/bin/nethermind.zip
 $ unzip nethermind/bin/nethermind.zip -d nethermind/bin
 $ chmod +x nethermind/bin/Nethermind.Runner
 # check that it works and version is correct (compare the version from the binary with version on the release page)
