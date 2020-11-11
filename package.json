@@ -10,7 +10,7 @@
     "all-nethermind-no-watcher": "npm run before-start && npm run start-test-setup-nethermind && npm run after-start-no-watcher",
     "before-start": "npm i && npm run get-all-submodules && npm run cleanup && npm run compile-posdao-contracts && npm run make-spec",
     "checkers": "START /B node scripts/watchOrdinaryNode.js && node scripts/deploy-staking-token.js && START /B node scripts/watchRandomSeed",
-    "cleanup": "bash scripts/stop-test-setup && rm -rf ./accounts ./config ./data && git checkout ./data && git checkout ./config && git checkout ./accounts",
+    "cleanup": " npm run stop-test-setup && del /f /s /q accounts config data && git checkout data && git checkout config && git checkout accounts",
     "get-all-submodules": "git submodule update --init --remote",
     "compile-posdao-contracts": "cd ./posdao-contracts && npm i && npm run compile",
     "make-spec": "cd scripts/ && network-spec.bat && cd .. && cd posdao-contracts && npm i && node ./scripts/make_spec.js && node ../scripts/copy-spec.js",
