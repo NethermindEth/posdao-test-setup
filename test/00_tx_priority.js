@@ -460,9 +460,11 @@ describe('TxPriority tests', () => {
         }];
       }, 1);
 
-      // We expect that the higher gas price transaction will be mined
+      // Here we expect the prioritized transaction to be mined,
+      // and the non-prioritized one with the same nonce is rejected
+      // despite that it has a higher gas price
       checkTransactionOrder([ // will fail on OpenEthereum
-        1, // BlockRewardAuRa.setErcToNativeBridgesAllowed
+        0, // StakingAuRa.setCandidateMinStake
       ], receipts);
     });
 
@@ -495,9 +497,11 @@ describe('TxPriority tests', () => {
         }];
       }, 1);
 
-      // We expect that the higher gas price transaction will be mined
+      // Here we expect the prioritized transaction to be mined,
+      // and the non-prioritized one with the same nonce is rejected
+      // despite that it has a higher gas price
       checkTransactionOrder([
-        0, // BlockRewardAuRa.setErcToNativeBridgesAllowed
+        1, // StakingAuRa.setCandidateMinStake
       ], receipts);
     });
 
@@ -534,9 +538,10 @@ describe('TxPriority tests', () => {
         }];
       }, 1);
 
-      // We expect that the higher gas price transaction will be mined
+      // We expect that the more weighted transaction will be mined
+      // despite that it has a lower gas price
       checkTransactionOrder([
-        0, // higher gas price 2 GWei
+        1, // StakingAuRa.setDelegatorMinStake
       ], receipts);
     });
 
@@ -573,9 +578,10 @@ describe('TxPriority tests', () => {
         }];
       }, 1);
 
-      // We expect that the higher gas price transaction will be mined      
+      // We expect that the more weighted transaction will be mined
+      // despite that it has a lower gas price
       checkTransactionOrder([ // will fail on OpenEthereum
-        1, // higher gas price 2 GWei
+        0, // StakingAuRa.setDelegatorMinStake
       ], receipts);
     });
 
