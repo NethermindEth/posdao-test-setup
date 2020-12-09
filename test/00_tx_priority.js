@@ -178,8 +178,8 @@ describe('TxPriority tests', () => {
         gasPrice: gasPrice1 // 1 GWei
       })).rawTransaction
     }]);
-    expect(result.receipts[0], `The owner succeeded when using disallowed gas price of ${gasPrice1} wei.`).to.equal(null);
-    expect(result.receipts[1], `An address ${account.address} succeeded when using disallowed gas price of ${gasPrice1} wei.`).to.equal(null);
+    expect(result.receipts[0], `The owner succeeded when using disallowed gas price of ${gasPrice1} wei. Tx hash: ${result.receipts[0] ? result.receipts[0].transactionHash : 'undefined'}`).to.equal(null);
+    expect(result.receipts[1], `An address ${account.address} succeeded when using disallowed gas price of ${gasPrice1} wei. Tx hash: ${result.receipts[1] ? result.receipts[1].transactionHash : 'undefined'}`).to.equal(null);
 
     // Clear sender whitelist
     isLocalConfig = false;
