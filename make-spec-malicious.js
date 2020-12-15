@@ -221,6 +221,9 @@ async function main() {
   spec.engine.authorityRound.params.reportMalicious = {
     "10": "0x75df42383afe6bf5194aa8fa0e9b3d5f9e869441"
   };  
+  // spec.engine.authorityRound.params.faultyBlocksTransition = {
+	  // "0x522df396ae70a058bd69778408630fdb023389b2": 5
+  // };
 
   console.log('Saving spec.json file ...');
   fs.writeFileSync(path.join(__dirname, '..', 'spec.json'), JSON.stringify(spec, null, '  '), 'UTF-8');
