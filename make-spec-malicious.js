@@ -40,7 +40,7 @@ async function main() {
     'Registry',
     'StakingAuRa',
     'TxPermission',
-    'TxPriority',
+    'TxPriorityMock',
     'ValidatorSetAuRa',
   ];
 
@@ -57,6 +57,8 @@ async function main() {
 
     if (contractName == 'AdminUpgradeabilityProxy') {
       dir = 'contracts/upgradeability/';
+    } else if (contractName == 'TxPriorityMock') {
+      dir = 'test/mockContracts/';
     } else if (contractName == 'StakingAuRa' && erc20Restricted) {
       realContractName = 'StakingAuRaCoins';
       dir = 'contracts/base/';
@@ -157,14 +159,15 @@ async function main() {
   };
 
   // Build TxPriority contract
-  const txPriorityContract = new web3.eth.Contract(contractsCompiled['TxPriority'].abi);
-  deploy = await txPriorityContract.deploy({data: '0x' + contractsCompiled['TxPriority'].bytecode, arguments: [
-    owner
+  const txPriorityContract = new web3.eth.Contract(contractsCompiled['TxPriorityMock'].abi);
+  deploy = await txPriorityContract.deploy({data: '0x' + contractsCompiled['TxPriorityMock'].bytecode, arguments: [
+    owner, true
   ]});
-  spec.accounts['0x4100000000000000000000000000000000000000'] = {
+  const txPriorityContractItem = {
     balance: '0',
     constructor: await deploy.encodeABI()
   };
+  spec.accounts['0x4100000000000000000000000000000000000000'] = txPriorityContractItem;
 
   // Build Certifier contract
   deploy = await contract.deploy({data: '0x' + storageProxyCompiled.bytecode, arguments: [
@@ -207,8 +210,8 @@ async function main() {
     initialValidators, // _miningAddresses
     stakingAddresses, // _stakingAddresses
     firstValidatorIsUnremovable, // _firstValidatorIsUnremovable
-    web3.utils.toWei('1', 'ether'), // _delegatorMinStake
-    web3.utils.toWei('1', 'ether'), // _candidateMinStake
+    web3.utils.toWei('1000'), // _delegatorMinStake
+    web3.utils.toWei('20000'), // _candidateMinStake
     stakingEpochDuration, // _stakingEpochDuration
     0, // _stakingEpochStartBlock
     stakeWithdrawDisallowPeriod, // _stakeWithdrawDisallowPeriod
