@@ -178,8 +178,8 @@ describe('TxPriority tests', () => {
         gasPrice: gasPrice1 // 1 GWei
       })).rawTransaction
     }]);
-    expect(result.receipts[0], `The owner succeeded when using disallowed gas price of ${gasPrice1} wei.`).to.equal(null);
-    expect(result.receipts[1], `An address ${account.address} succeeded when using disallowed gas price of ${gasPrice1} wei.`).to.equal(null);
+    expect(result.receipts[0], `The owner succeeded when using disallowed gas price of ${gasPrice1} wei. Tx hash: ${result.receipts[0] ? result.receipts[0].transactionHash : 'undefined'}`).to.equal(null);
+    expect(result.receipts[1], `An address ${account.address} succeeded when using disallowed gas price of ${gasPrice1} wei. Tx hash: ${result.receipts[1] ? result.receipts[1].transactionHash : 'undefined'}`).to.equal(null);
 
     // Clear sender whitelist
     isLocalConfig = false;
@@ -2181,6 +2181,7 @@ describe('TxPriority tests', () => {
         // There must be emitInitiateChange and/or randomness transaction
         // at the beginning of the block
         const block = await web3.eth.getBlock(blockNumber, true);
+        expect(block, `Block ${blockNumber} is null`).not.to.eql(null);
         expect(block.transactions.length).to.be.at.least(maxTransactionIndex + 1);
         for (let i = 0; i < block.transactions.length; i++) {
           const superiorTx = block.transactions[i];
