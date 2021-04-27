@@ -71,10 +71,6 @@ async function main() {
         .encodeABI();
     let txParams;
 	const latestBlock = await sendRequest(`curl --data '{"method":"eth_getBlockByNumber","params":["latest",false],"id":1,"jsonrpc":"2.0"}' -H "Content-Type: application/json" -X POST ${web3.currentProvider.host} 2>/dev/null`);
-	//var cmd = `curl --data {"method":"eth_getBlockByNumber","params":["latest",false],"id":1,"jsonrpc":"2.0"} -H "Content-Type: application/json" -X POST ${web3.currentProvider.host}`;
-    //const latestBlock = await sendRequest(cmd);
-	//	  const { result, stderr } = await execAsync(cmd);
-// console.log("*****ExecAsync  " + result);
     if (latestBlock.baseFee) { // EIP-1559 is activated, so we can use a new type of transactions
         txParams = {
             from: OWNER,
@@ -96,7 +92,6 @@ async function main() {
     }
 	var stakingTokenRequestPath = path.join(__dirname, '../data/stakingTransaction.json');
 	fs.writeFileSync(stakingTokenRequestPath, `{"method":"eth_sendTransaction","params":[${JSON.stringify(txParams)}],"id":1,"jsonrpc":"2.0"}`);
-  // const txHash = await sendRequest(`curl --data {"method":"eth_sendTransaction","params":[${JSON.stringify(txParams)}],"id":1,"jsonrpc":"2.0"} -H "Content-Type: application/json" -X POST ${web3.currentProvider.host}` +  ` 2>nul`);
 
 	const txHash = await sendRequest(`curl --data @${stakingTokenRequestPath} -H "Content-Type: application/json" -X POST ${web3.currentProvider.host}` +  ` 2>nul`);
 	let stakingTokenDeployTxReceipt;
