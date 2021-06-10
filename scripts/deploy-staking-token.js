@@ -77,7 +77,7 @@ async function main() {
             from: OWNER,
             type: '0x2',
             chainId: web3.utils.numberToHex(netId),
-            maxPriorityFeePerGas: web3.utils.numberToHex('1000000000'),
+            maxPriorityFeePerGas: web3.utils.numberToHex('0'),
             //maxPriorityFeePerGas: web3.utils.numberToHex('0'),
             maxFeePerGas: web3.utils.numberToHex('0'),
             gas: web3.utils.numberToHex('4700000'),
